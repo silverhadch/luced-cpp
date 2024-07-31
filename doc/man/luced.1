@@ -1,0 +1,54 @@
+NAME
+
+luced - Terminal Text Editor
+(Still in Development)
+
+SYNOPSIS
+
+luced [filename]
+
+luced [filename] [options]
+
+DESCRIPTION
+
+luced is a simple terminal-based text editor written in Python.
+It opens a file for editing or creates a new file if it doesn't exist.
+The editor also supports basic clipboard operations.
+When run without arguments, luced starts the editor with a test buffer.
+When run with a filename, luced will open the specified file or create it if it doesn't exist.
+If run with root privileges using sudo, you will be reminded in the editor that you are operating as root.
+
+OPTIONS
+
+filename: The file to open or create.
+If omitted, luced will start with a test buffer.
+
+SPECIAL USAGE
+
+sudo luced filename: Opens the editor with root privileges.
+A warning will be displayed within the editor to inform you of the root access.
+
+KEYBINDS
+
+Ctrl-C: Kill the Editor
+Ctrl-Q: Quit normally
+Ctrl-S: Save File or create a new one if it doesn't exist
+Arrows: Move the Cursor
+
+Special Keybinds for Clipboard:
+
+Ctrl-Shift-C: Copy (with mouse-selected text). Clipboard access requires sudo -E to be effective.
+Ctrl-Shift-V: Paste
+
+NOTES
+
+If you are running luced as root, clipboard functionality is disabled due to the lack of the HOME environment variable.
+To enable clipboard access, relaunch luced with sudo -E.
+
+AUTHOR
+
+Hadi Chokr
+
+SEE ALSO
+
+For more details and updates, visit the GitHub repository at https://github.com/silverhadch/luced-cpp
