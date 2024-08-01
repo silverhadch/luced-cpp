@@ -6,43 +6,65 @@
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+#include <sys/types.h>
+#include <pwd.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+using namespace std;
 
 bool home = true;
+bool is_root = (getuid() == 0);
 
-void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, int cursor_x, const std::string& message) {
+void draw_text(WINDOW* win, const vector<string>& text, int cursor_y, int cursor_x, const string& message = "", bool new_file = false) {
+    wclear(win);
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
-    wclear(win);
 
     // Draw top and bottom bars
-    std::string top_bar = "Luced v.2.1 - Terminal Text Editor";
-    std::string bottom_bar = "Ctrl + Shift + V: Paste Clipboard Content  Ctrl + S: Save File  Ctrl + Q: Exit  Ctrl + Shift + C: Copy to Clipboard";
+    string top_bar = "Luced v.2.2 - Terminal Text Editor";
+    string bottom_bar = "Ctrl + Shift + V: Paste Clipboard Content  Ctrl + S: Save File  Ctrl + Q: Exit  Ctrl + Shift + C: Copy to Clipboard";
 
     // Center the top bar
     int top_bar_x = (max_x - top_bar.length()) / 2;
-    wattron(win, A_BOLD);
+    wattron(win, A_BOLD | A_REVERSE);
     mvwaddnstr(win, 0, top_bar_x, top_bar.c_str(), max_x - top_bar_x);
-    wattroff(win, A_BOLD);
+    wattroff(win, A_BOLD | A_REVERSE);
 
-    // Center the bottom bar
+    // Center the bottom bar with highlighting
     int bottom_bar_x = (max_x - bottom_bar.length()) / 2;
+    wattron(win, A_BOLD | A_REVERSE);
     mvwaddnstr(win, max_y - 1, bottom_bar_x, bottom_bar.c_str(), max_x - bottom_bar_x);
+    wattroff(win, A_BOLD | A_REVERSE);
 
-    // Display a message if needed
-    if (!message.empty()) {
-        mvwaddnstr(win, max_y / 2, (max_x - message.length()) / 2, message.c_str(), max_x - (max_x - message.length()) / 2);
+    // Display "New File" message if applicable with highlighting
+    if (new_file) {
+        string new_file_msg = "New File";
+        wattron(win, A_BOLD | A_REVERSE);
+        mvwaddnstr(win, max_y - 2, (max_x - new_file_msg.length()) / 2, new_file_msg.c_str(), max_x - (max_x - new_file_msg.length()) / 2);
+        wattroff(win, A_BOLD | A_REVERSE);
     }
 
-    // Ensure cursor_y and cursor_x don't go out of bounds
-    cursor_y = std::min(std::max(cursor_y, 1), (int)text.size() + 1);
-    cursor_x = std::min(std::max(cursor_x, 0), max_x - 1);
+    // Display a message if needed with highlighting
+    if (!message.empty()) {
+        wattron(win, A_BOLD | A_REVERSE);
+        mvwaddnstr(win, max_y / 2, (max_x - message.length()) / 2, message.c_str(), max_x - (max_x - message.length()) / 2);
+        wattroff(win, A_BOLD | A_REVERSE);
+    }
 
     // Display text within the window
-    int start_y = std::max(1, cursor_y - (max_y - 2) / 2);
-    int end_y = std::min((int)text.size() + 1, start_y + (max_y - 2));
+    int start_y = 1; // Start displaying text below the top bar
+    int end_y = min((int)text.size(), max_y - 2); // Display text up to window height minus top and bottom bars
 
-    for (int i = start_y - 1; i < end_y - 1; ++i) {
-        mvwaddnstr(win, i - start_y + 1, 0, text[i].c_str(), max_x);
+    for (int i = 0; i < end_y; ++i) {
+        string line = text[i];
+        size_t start_pos = 0;
+        size_t length = (size_t)max_x;
+        while (start_pos < line.size()) {
+            mvwaddnstr(win, i + 1, 0, line.substr(start_pos, length).c_str(), (int)length);
+            start_pos += length;
+            length = min((size_t)max_x, line.size() - start_pos);
+        }
     }
 
     // Move the cursor to the necessary position
@@ -50,7 +72,7 @@ void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, 
     wrefresh(win);
 }
 
-std::pair<int, int> move_cursor(int key, int cursor_y, int cursor_x, const std::vector<std::string>& text, int max_y, int max_x) {
+pair<int, int> move_cursor(int key, int cursor_y, int cursor_x, const vector<string>& text, int max_y, int max_x) {
     int num_lines = text.size();
 
     if (key == KEY_LEFT) {
@@ -58,40 +80,40 @@ std::pair<int, int> move_cursor(int key, int cursor_y, int cursor_x, const std::
             cursor_x--;
         } else if (cursor_y > 1) {
             cursor_y--;
-            cursor_x = std::min(cursor_x, (int)text[cursor_y - 2].length());
+            cursor_x = min(cursor_x, (int)text[cursor_y - 2].length());
         }
     } else if (key == KEY_RIGHT) {
         if (cursor_x < (int)text[cursor_y - 1].length()) {
             cursor_x++;
         } else if (cursor_y < num_lines) {
             cursor_y++;
-            cursor_x = std::min(cursor_x, (int)text[cursor_y - 1].length());
+            cursor_x = min(cursor_x, (int)text[cursor_y - 1].length());
         }
     } else if (key == KEY_UP) {
         if (cursor_y > 1) {
             cursor_y--;
-            cursor_x = std::min(cursor_x, (int)text[cursor_y - 1].length());
+            cursor_x = min(cursor_x, (int)text[cursor_y - 1].length());
         }
     } else if (key == KEY_DOWN) {
         if (cursor_y < num_lines) {
             cursor_y++;
-            cursor_x = std::min(cursor_x, (int)text[cursor_y - 1].length());
+            cursor_x = min(cursor_x, (int)text[cursor_y - 1].length());
         }
     }
 
-    cursor_x = std::min(cursor_x, max_x - 1);
+    cursor_x = min(cursor_x, max_x - 1);
     return {cursor_y, cursor_x};
 }
 
-void clipboard_copy(const std::string& text) {
-    std::string command = "echo -n \"" + text + "\" | xclip -selection clipboard";
-    std::system(command.c_str());
+void clipboard_copy(const string& text) {
+    string command = "wl-copy <<< \"" + text + "\"";
+    system(command.c_str());
 }
 
-std::string clipboard_paste() {
+string clipboard_paste() {
     char buffer[128];
-    std::string result;
-    FILE* pipe = popen("xclip -selection clipboard -o", "r");
+    string result;
+    FILE* pipe = popen("wl-paste", "r");
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
             result += buffer;
@@ -101,27 +123,27 @@ std::string clipboard_paste() {
     return result;
 }
 
-bool save_file(const std::string& filename, const std::vector<std::string>& text) {
-    std::ofstream file(filename);
+bool save_file(const string& filename, const vector<string>& text) {
+    ofstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Error saving file: " << filename << std::endl;
+        cerr << "Error saving file: " << filename << endl;
         return false;
     }
     for (const auto& line : text) {
-        file << line << std::endl;
+        file << line << endl;
     }
     return true;
 }
 
-std::vector<std::string> load_file(const std::string& filename) {
-    std::vector<std::string> text;
-    std::ifstream file(filename);
+vector<string> load_file(const string& filename) {
+    vector<string> text;
+    ifstream file(filename);
     if (!file.is_open()) {
-        std::ofstream new_file(filename);  // Create the file if it doesn't exist
+        // Do not create an empty file here
         text.push_back("");
     } else {
-        std::string line;
-        while (std::getline(file, line)) {
+        string line;
+        while (getline(file, line)) {
             text.push_back(line);
         }
         if (text.empty()) {
@@ -131,15 +153,14 @@ std::vector<std::string> load_file(const std::string& filename) {
     return text;
 }
 
-void main_loop(WINDOW* win, const std::string& filename) {
-    // Initialize window settings
+void main_loop(WINDOW* win, const string& filename) {
     raw();           // Disable line buffering
     keypad(win, TRUE); // Enable special keys
     noecho();        // Don't echo input
     curs_set(1);     // Show cursor
 
     // Load file content
-    std::vector<std::string> text = load_file(filename);
+    vector<string> text = load_file(filename);
 
     // Initial values
     int cursor_x = 0;
@@ -147,44 +168,34 @@ void main_loop(WINDOW* win, const std::string& filename) {
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
+    bool new_file = filename == "untitled.txt" && text.size() == 1 && text[0].empty();
+    bool file_saved = !new_file;
+
+    if (is_root) {
+        draw_text(win, text, cursor_y, cursor_x, "You are running as root!");
+        wgetch(win); // Wait for a key press before continuing
+    }
+
     while (true) {
-        draw_text(win, text, cursor_y, cursor_x, "");
+        draw_text(win, text, cursor_y, cursor_x, "", new_file && !file_saved);
 
         int key = wgetch(win);
 
         if (key == 3) { // Ctrl-C to terminate
             break;
-        } else if (key == 22) { // Ctrl-V to paste (adjust for actual implementation context)
-            if (home) {
-                std::string clipboard_text = clipboard_paste();
-                if (!clipboard_text.empty()) {
-                    std::istringstream ss(clipboard_text);
-                    std::string line;
-                    while (std::getline(ss, line)) {
-                        if (cursor_y > (int)text.size()) {
-                            text.push_back(line);
-                        } else {
-                            text[cursor_y - 1].insert(cursor_x, line);
-                        }
-                        cursor_y++;
-                    }
-                    cursor_y = std::min(cursor_y - 1, (int)text.size());
-                    cursor_x = text[cursor_y - 1].length();
-                }
-            } else {
-                draw_text(win, text, cursor_y, cursor_x, "Clipboard access denied. Relaunch with sudo -E.");
-                wgetch(win); // Wait for a key press before continuing
-            }
         } else if (key == 19) { // Ctrl-S to save
             if (save_file(filename, text)) {
                 draw_text(win, text, cursor_y, cursor_x, "File saved successfully.");
+                file_saved = true;
             } else {
                 draw_text(win, text, cursor_y, cursor_x, "Error saving file.");
             }
             wgetch(win); // Wait for a key press before continuing
         } else if (key == 17) { // Ctrl-Q to quit
+            draw_text(win, text, cursor_y, cursor_x, "Goodbye!");
+            wgetch(win); // Wait for a key press before exiting
             break;
-        } else if (key == KEY_BACKSPACE || key == 127) {
+        } else if (key == 127 || key == KEY_BACKSPACE) { // Handle backspace
             if (cursor_x > 0) {
                 text[cursor_y - 1].erase(cursor_x - 1, 1);
                 cursor_x--;
@@ -194,7 +205,7 @@ void main_loop(WINDOW* win, const std::string& filename) {
                 text.erase(text.begin() + cursor_y - 1);
                 cursor_y--;
             }
-        } else if (key == '\n' || key == KEY_ENTER) {
+        } else if (key == '\n' || key == KEY_ENTER) { // Handle new line
             if (cursor_y > (int)text.size()) {
                 text.push_back("");
             } else {
@@ -203,65 +214,83 @@ void main_loop(WINDOW* win, const std::string& filename) {
             }
             cursor_y++;
             cursor_x = 0;
-        } else if (key == 3) { // Ctrl-C (copy)
-            if (home && cursor_y <= (int)text.size()) {
-                clipboard_copy(text[cursor_y - 1]);
-                draw_text(win, text, cursor_y, cursor_x, "Line copied to clipboard.");
+            if (new_file && !file_saved) {
+                draw_text(win, text, cursor_y, cursor_x, "New File", true);
                 wgetch(win); // Wait for a key press before continuing
+            }
+        } else if (key == 67) { // Ctrl-Shift-C (uppercase C)
+            if (home) {
+                if (cursor_y <= (int)text.size()) {
+                    clipboard_copy(text[cursor_y - 1]);
+                    draw_text(win, text, cursor_y, cursor_x, "Line copied to clipboard.");
+                    wgetch(win); // Wait for a key press before continuing
+                }
+            } else {
+                draw_text(win, text, cursor_y, cursor_x, "Clipboard access denied. Relaunch with sudo -E.");
+                wgetch(win); // Wait for a key press before continuing
+            }
+        } else if (key == 86) { // Ctrl-Shift-V (uppercase V)
+            if (home) {
+                string clipboard_text = clipboard_paste();
+                if (!clipboard_text.empty()) {
+                    istringstream ss(clipboard_text);
+                    string line;
+                    while (getline(ss, line)) {
+                        if (cursor_y > (int)text.size()) {
+                            text.push_back(line);
+                        } else {
+                            text[cursor_y - 1].insert(cursor_x, line);
+                        }
+                        cursor_y++;
+                    }
+                    cursor_y = min(cursor_y - 1, (int)text.size());
+                    cursor_x = text[cursor_y - 1].length();
+                }
             } else {
                 draw_text(win, text, cursor_y, cursor_x, "Clipboard access denied. Relaunch with sudo -E.");
                 wgetch(win); // Wait for a key press before continuing
             }
         } else {
-            auto [new_cursor_y, new_cursor_x] = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
-            cursor_y = new_cursor_y;
-            cursor_x = new_cursor_x;
-
-            if (isprint(key)) {
+            tie(cursor_y, cursor_x) = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
+            if (32 <= key && key <= 126) {
                 if (cursor_y <= (int)text.size()) {
                     text[cursor_y - 1].insert(cursor_x, 1, (char)key);
                 } else {
-                    text.push_back(std::string(1, (char)key));
+                    text.push_back(string(1, (char)key));
                 }
                 cursor_x++;
             }
         }
     }
 
-    // Reset terminal settings
+    // Clean up ncurses
     noraw();
     keypad(win, FALSE);
+    echo();
+    curs_set(0);
+
+    // Print goodbye message to the terminal and wait before exiting
+    endwin(); // Ensure ncurses cleanup is complete
+    cout << "Goodbye!" << endl;
+
 }
 
 int main(int argc, char* argv[]) {
-    std::string filename = "Test.txt";
+    const char* home_env = getenv("HOME");
+    home = home_env && string(home_env).find("/home/") == 0;
+
+    string filename = "untitled.txt";
     if (argc > 1) {
         filename = argv[1];
     }
 
-    // Check if running as root
-    if (geteuid() == 0) {
-        std::string warning_root = "You are root! Proceed with caution!";
-        std::string clipboard_warning = "Clipboard access denied. Relaunch with sudo -E.";
-
-        initscr();
-        int max_y, max_x;
-        getmaxyx(stdscr, max_y, max_x);
-        mvaddstr(max_y / 2 - 1, (max_x - warning_root.length()) / 2, warning_root.c_str());
-        mvaddstr(max_y / 2, (max_x - clipboard_warning.length()) / 2, clipboard_warning.c_str());
-        refresh();
-        getch();
-        endwin();
-
-        home = false;
-    }
-
     initscr();
-    noecho();
-    cbreak();
-    keypad(stdscr, TRUE);
-    main_loop(stdscr, filename);
+    WINDOW* win = newwin(LINES, COLS, 0, 0);
+    main_loop(win, filename);
+    delwin(win);
     endwin();
 
     return 0;
 }
+
+
