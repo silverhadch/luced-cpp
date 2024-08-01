@@ -11,7 +11,7 @@ luced [filename] [options]
 
 DESCRIPTION
 
-luced is a simple terminal-based text editor written in Python.
+luced is a simple terminal-based text editor written in C++ formerly written in Python.
 It opens a file for editing or creates a new file if it doesn't exist.
 The editor also supports basic clipboard operations.
 When run without arguments, luced starts the editor with a test buffer.
@@ -37,13 +37,8 @@ Arrows: Move the Cursor
 
 Special Keybinds for Clipboard:
 
-Ctrl-Shift-C: Copy (with mouse-selected text). Clipboard access requires sudo -E to be effective.
+Ctrl-Shift-C: Copy (with mouse-selected text).
 Ctrl-Shift-V: Paste
-
-NOTES
-
-If you are running luced as root, clipboard functionality is disabled due to the lack of the HOME environment variable.
-To enable clipboard access, relaunch luced with sudo -E.
 
 AUTHOR
 
