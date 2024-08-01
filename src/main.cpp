@@ -6,13 +6,17 @@
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+#include <sys/types.h>
+#include <pwd.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 bool home = true;
 
-void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, int cursor_x, const std::string& message) {
+void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, int cursor_x, const std::string& message = "") {
+    wclear(win);
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
-    wclear(win);
 
     // Draw top and bottom bars
     std::string top_bar = "Luced v.2.1 - Terminal Text Editor";
@@ -20,13 +24,13 @@ void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, 
 
     // Center the top bar
     int top_bar_x = (max_x - top_bar.length()) / 2;
-    wattron(win, A_BOLD);
+    wattron(win, A_BOLD | A_REVERSE);
     mvwaddnstr(win, 0, top_bar_x, top_bar.c_str(), max_x - top_bar_x);
-    wattroff(win, A_BOLD);
 
     // Center the bottom bar
     int bottom_bar_x = (max_x - bottom_bar.length()) / 2;
     mvwaddnstr(win, max_y - 1, bottom_bar_x, bottom_bar.c_str(), max_x - bottom_bar_x);
+    wattroff(win, A_BOLD | A_REVERSE);
 
     // Display a message if needed
     if (!message.empty()) {
@@ -42,7 +46,11 @@ void draw_text(WINDOW* win, const std::vector<std::string>& text, int cursor_y, 
     int end_y = std::min((int)text.size() + 1, start_y + (max_y - 2));
 
     for (int i = start_y - 1; i < end_y - 1; ++i) {
-        mvwaddnstr(win, i - start_y + 1, 0, text[i].c_str(), max_x);
+        int line_y = i - start_y + 1;
+        std::string line = text[i];
+        for (size_t j = 0; j < line.size(); j += max_x) {
+            mvwaddnstr(win, line_y++, 0, line.substr(j, max_x).c_str(), max_x);
+        }
     }
 
     // Move the cursor to the necessary position
@@ -84,14 +92,14 @@ std::pair<int, int> move_cursor(int key, int cursor_y, int cursor_x, const std::
 }
 
 void clipboard_copy(const std::string& text) {
-    std::string command = "echo -n \"" + text + "\" | xclip -selection clipboard";
+    std::string command = "wl-copy <<< \"" + text + "\"";
     std::system(command.c_str());
 }
 
 std::string clipboard_paste() {
     char buffer[128];
     std::string result;
-    FILE* pipe = popen("xclip -selection clipboard -o", "r");
+    FILE* pipe = popen("wl-paste", "r");
     if (pipe) {
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
             result += buffer;
@@ -132,7 +140,6 @@ std::vector<std::string> load_file(const std::string& filename) {
 }
 
 void main_loop(WINDOW* win, const std::string& filename) {
-    // Initialize window settings
     raw();           // Disable line buffering
     keypad(win, TRUE); // Enable special keys
     noecho();        // Don't echo input
@@ -154,7 +161,7 @@ void main_loop(WINDOW* win, const std::string& filename) {
 
         if (key == 3) { // Ctrl-C to terminate
             break;
-        } else if (key == 22) { // Ctrl-V to paste (adjust for actual implementation context)
+        } else if (key == 22 && (key & KEY_SHIFT)) { // Ctrl-Shift-V to paste
             if (home) {
                 std::string clipboard_text = clipboard_paste();
                 if (!clipboard_text.empty()) {
@@ -203,21 +210,20 @@ void main_loop(WINDOW* win, const std::string& filename) {
             }
             cursor_y++;
             cursor_x = 0;
-        } else if (key == 3) { // Ctrl-C (copy)
-            if (home && cursor_y <= (int)text.size()) {
-                clipboard_copy(text[cursor_y - 1]);
-                draw_text(win, text, cursor_y, cursor_x, "Line copied to clipboard.");
-                wgetch(win); // Wait for a key press before continuing
+        } else if (key == 3 && (key & KEY_SHIFT)) { // Ctrl-Shift-C (copy)
+            if (home) {
+                if (cursor_y <= (int)text.size()) {
+                    clipboard_copy(text[cursor_y - 1]);
+                    draw_text(win, text, cursor_y, cursor_x, "Line copied to clipboard.");
+                    wgetch(win); // Wait for a key press before continuing
+                }
             } else {
                 draw_text(win, text, cursor_y, cursor_x, "Clipboard access denied. Relaunch with sudo -E.");
                 wgetch(win); // Wait for a key press before continuing
             }
         } else {
-            auto [new_cursor_y, new_cursor_x] = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
-            cursor_y = new_cursor_y;
-            cursor_x = new_cursor_x;
-
-            if (isprint(key)) {
+            std::tie(cursor_y, cursor_x) = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
+            if (32 <= key && key <= 126) {
                 if (cursor_y <= (int)text.size()) {
                     text[cursor_y - 1].insert(cursor_x, 1, (char)key);
                 } else {
@@ -228,32 +234,40 @@ void main_loop(WINDOW* win, const std::string& filename) {
         }
     }
 
-    // Reset terminal settings
     noraw();
     keypad(win, FALSE);
+    echo();
+    curs_set(0);
 }
 
 int main(int argc, char* argv[]) {
-    std::string filename = "Test.txt";
-    if (argc > 1) {
-        filename = argv[1];
+    if (argc < 2) {
+        std::cerr << "Usage: luced <filename>" << std::endl;
+        return 1;
     }
+
+    std::string filename = argv[1];
 
     // Check if running as root
     if (geteuid() == 0) {
-        std::string warning_root = "You are root! Proceed with caution!";
-        std::string clipboard_warning = "Clipboard access denied. Relaunch with sudo -E.";
+        home = false;
+
+        if (getenv("HOME") != nullptr && std::string(getenv("HOME")) != "/root") {
+            home = true;
+        }
 
         initscr();
         int max_y, max_x;
         getmaxyx(stdscr, max_y, max_x);
+        std::string warning_root = "You are root! Proceed with caution!";
+        std::string clipboard_warning = "(If you want to use the Clipboard, relaunch with sudo -E)";
         mvaddstr(max_y / 2 - 1, (max_x - warning_root.length()) / 2, warning_root.c_str());
-        mvaddstr(max_y / 2, (max_x - clipboard_warning.length()) / 2, clipboard_warning.c_str());
+        if (!home) {
+            mvaddstr(max_y / 2, (max_x - clipboard_warning.length()) / 2, clipboard_warning.c_str());
+        }
         refresh();
         getch();
         endwin();
-
-        home = false;
     }
 
     initscr();
