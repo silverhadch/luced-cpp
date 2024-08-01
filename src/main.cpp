@@ -105,6 +105,65 @@ pair<int, int> move_cursor(int key, int cursor_y, int cursor_x, const vector<str
     return {cursor_y, cursor_x};
 }
 
+void insert_text(vector<string>& text, int& cursor_y, int& cursor_x, char key, int max_x) {
+    if (cursor_y > (int)text.size()) {
+        text.push_back(string(1, key));
+        cursor_y = text.size();
+        cursor_x = 1;
+    } else {
+        string& current_line = text[cursor_y - 1];
+        current_line.insert(cursor_x, 1, key);
+        cursor_x++;
+        // Wrap text if needed
+        if (cursor_x >= max_x) {
+            // Split the current line at max_x and insert the remainder in the next line
+            string new_line = current_line.substr(max_x - 1);
+            current_line = current_line.substr(0, max_x - 1);
+            text.insert(text.begin() + cursor_y, new_line);
+            cursor_y++;
+            cursor_x = 0;
+        }
+    }
+}
+
+void handle_key_input(vector<string>& text, int& cursor_y, int& cursor_x, int key, int max_x, int max_y) {
+    if (key >= 32 && key <= 126) { // Printable characters
+        insert_text(text, cursor_y, cursor_x, static_cast<char>(key), max_x);
+    } else if (key == KEY_BACKSPACE || key == 127) { // Backspace key
+        if (cursor_x > 0 || cursor_y > 1) {
+            if (cursor_x > 0) {
+                string& current_line = text[cursor_y - 1];
+                current_line.erase(cursor_x - 1, 1);
+                cursor_x--;
+            } else if (cursor_y > 1) {
+                cursor_y--;
+                cursor_x = text[cursor_y - 1].length();
+                text[cursor_y - 1] += text[cursor_y];
+                text.erase(text.begin() + cursor_y);
+            }
+        }
+    } else if (key == KEY_DC) { // Delete key
+        if (cursor_x < (int)text[cursor_y - 1].length()) {
+            text[cursor_y - 1].erase(cursor_x, 1);
+        } else if (cursor_y < (int)text.size()) {
+            text[cursor_y - 1] += text[cursor_y];
+            text.erase(text.begin() + cursor_y);
+        }
+    } else if (key == KEY_ENTER || key == 10) { // Enter key
+        if (cursor_y == (int)text.size()) {
+            text.push_back("");
+        } else {
+            string& current_line = text[cursor_y - 1];
+            text[cursor_y - 1] = current_line.substr(0, cursor_x);
+            text.insert(text.begin() + cursor_y, current_line.substr(cursor_x));
+        }
+        cursor_y++;
+        cursor_x = 0;
+    } else {
+        tie(cursor_y, cursor_x) = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
+    }
+}
+
 void clipboard_copy(const string& text) {
     string command = "wl-copy <<< \"" + text + "\"";
     system(command.c_str());
@@ -195,29 +254,6 @@ void main_loop(WINDOW* win, const string& filename) {
             draw_text(win, text, cursor_y, cursor_x, "Goodbye!");
             wgetch(win); // Wait for a key press before exiting
             break;
-        } else if (key == 127 || key == KEY_BACKSPACE) { // Handle backspace
-            if (cursor_x > 0) {
-                text[cursor_y - 1].erase(cursor_x - 1, 1);
-                cursor_x--;
-            } else if (cursor_y > 1) {
-                cursor_x = text[cursor_y - 2].length();
-                text[cursor_y - 2] += text[cursor_y - 1];
-                text.erase(text.begin() + cursor_y - 1);
-                cursor_y--;
-            }
-        } else if (key == '\n' || key == KEY_ENTER) { // Handle new line
-            if (cursor_y > (int)text.size()) {
-                text.push_back("");
-            } else {
-                text.insert(text.begin() + cursor_y, text[cursor_y - 1].substr(cursor_x));
-                text[cursor_y - 1] = text[cursor_y - 1].substr(0, cursor_x);
-            }
-            cursor_y++;
-            cursor_x = 0;
-            if (new_file && !file_saved) {
-                draw_text(win, text, cursor_y, cursor_x, "New File", true);
-                wgetch(win); // Wait for a key press before continuing
-            }
         } else if (key == 67) { // Ctrl-Shift-C (uppercase C)
             if (home) {
                 if (cursor_y <= (int)text.size()) {
@@ -251,15 +287,7 @@ void main_loop(WINDOW* win, const string& filename) {
                 wgetch(win); // Wait for a key press before continuing
             }
         } else {
-            tie(cursor_y, cursor_x) = move_cursor(key, cursor_y, cursor_x, text, max_y, max_x);
-            if (32 <= key && key <= 126) {
-                if (cursor_y <= (int)text.size()) {
-                    text[cursor_y - 1].insert(cursor_x, 1, (char)key);
-                } else {
-                    text.push_back(string(1, (char)key));
-                }
-                cursor_x++;
-            }
+            handle_key_input(text, cursor_y, cursor_x, key, max_x, max_y);
         }
     }
 
@@ -272,7 +300,6 @@ void main_loop(WINDOW* win, const string& filename) {
     // Print goodbye message to the terminal and wait before exiting
     endwin(); // Ensure ncurses cleanup is complete
     cout << "Goodbye!" << endl;
-
 }
 
 int main(int argc, char* argv[]) {
@@ -292,5 +319,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-
