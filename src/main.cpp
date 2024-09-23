@@ -25,7 +25,7 @@ void draw_text(WINDOW *win, const vector<string> &text, int cursor_y,
   getmaxyx(win, max_y, max_x);
 
   // Draw top and bottom bars
-  string top_bar = "Luced v.2.2 - Terminal Text Editor";
+  string top_bar = "Luced v.2.3 - Terminal Text Editor";
   string bottom_bar =
       "Ctrl + Shift + V: Paste Clipboard Content  Ctrl + S: Save File  Ctrl + "
       "Q: Exit  Ctrl + Shift + C: Copy to Clipboard";
