@@ -1,3 +1,4 @@
+
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -127,15 +128,19 @@ void insert_text(vector<string> &text, int &cursor_y, int &cursor_x, char key,
     string &current_line = text[cursor_y - 1];
     current_line.insert(cursor_x, 1, key);
     cursor_x++;
-    // Wrap text if needed
-    if (cursor_x >= max_x) {
-      // Split the current line at max_x and insert the remainder in the next
-      // line
-      string new_line = current_line.substr(max_x - 1);
-      current_line = current_line.substr(0, max_x - 1);
+
+    // Perform line wrapping based on the max_x (window width) rather than
+    // cursor position
+    if (current_line.length() > (size_t)max_x) {
+      // Find the position where the line should wrap
+      size_t wrap_position = max_x;
+      string new_line = current_line.substr(wrap_position);
+      current_line = current_line.substr(0, wrap_position);
+
+      // Insert the overflow into a new line in the text
       text.insert(text.begin() + cursor_y, new_line);
-      cursor_y++;
-      cursor_x = 0;
+      cursor_y++;   // Move the cursor to the next line
+      cursor_x = 0; // Reset cursor position to the start of the new line
     }
   }
 }
